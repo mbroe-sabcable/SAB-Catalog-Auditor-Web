@@ -1,0 +1,12 @@
+body {
+    background: #f5f5f5;
+    font-family: Arial, sans-serif;
+}
+
+.card {
+    border: none;
+}
+
+.table thead th {
+    background-color: #f8f9fa;
+}
