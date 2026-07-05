@@ -10,6 +10,56 @@ def _build_output_dir():
     return output_dir
 
 
+def _append_product_corrections_sheet(workbook, product_corrections):
+    product_sheet = workbook.create_sheet("Product Corrections")
+    product_sheet.append(["SKU", "Total Corrections", "Category", "System", "Field", "Current Value", "Correct Value", "Reason"])
+
+    for product in product_corrections:
+        sku = product.get("sku", "")
+        total = product.get("total_corrections", 0)
+        categories = [
+            ("Product Identity corrections", product.get("product_identity_corrections", [])),
+            ("Engineering corrections", product.get("engineering_corrections", [])),
+            ("Website QA corrections", product.get("website_qa_corrections", [])),
+            ("Directus QA corrections", product.get("directus_qa_corrections", [])),
+        ]
+
+        if total == 0:
+            product_sheet.append([sku, 0, "No Corrections", "", "", "", "", "No Corrections"])
+            continue
+
+        first_row_for_sku = True
+        for category_name, corrections in categories:
+            if not corrections:
+                product_sheet.append([
+                    sku if first_row_for_sku else "",
+                    total if first_row_for_sku else "",
+                    category_name,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "No Corrections",
+                ])
+                first_row_for_sku = False
+                continue
+
+            for correction in corrections:
+                product_sheet.append(
+                    [
+                        sku if first_row_for_sku else "",
+                        total if first_row_for_sku else "",
+                        category_name,
+                        correction.get("system", ""),
+                        correction.get("field", ""),
+                        correction.get("current_value", ""),
+                        correction.get("correct_value", ""),
+                        correction.get("reason", ""),
+                    ]
+                )
+                first_row_for_sku = False
+
+
 def write_audit_report(summary_data):
     output_dir = _build_output_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -73,6 +123,45 @@ def write_audit_report(summary_data):
                 correction.get("reason", ""),
             ]
         )
+
+    four_way_sheet = workbook.create_sheet("Four-Way Comparison")
+    four_way_sheet.append(["SKU", "Field", "German", "TrackVia", "Directus", "US Catalog", "Status"])
+    for comparison in summary_data.get("four_way_comparisons", []):
+        four_way_sheet.append(
+            [
+                comparison.get("sku", ""),
+                comparison.get("field", ""),
+                comparison.get("german_value", ""),
+                comparison.get("trackvia_value", ""),
+                comparison.get("directus_value", ""),
+                comparison.get("us_catalog_value", ""),
+                comparison.get("status", ""),
+            ]
+        )
+
+    outlier_sheet = workbook.create_sheet("Outlier Analysis")
+    outlier_sheet.append(["SKU", "Field", "German", "TrackVia", "Directus", "US Catalog", "Status", "Consensus Value", "Outlier System", "Recommendation", "Confidence"])
+    for comparison in summary_data.get("four_way_comparisons", []):
+        analysis = comparison.get("analysis", {})
+        if analysis.get("status") in {"PASS", ""}:
+            continue
+        outlier_sheet.append(
+            [
+                comparison.get("sku", ""),
+                comparison.get("field", ""),
+                comparison.get("german_value", ""),
+                comparison.get("trackvia_value", ""),
+                comparison.get("directus_value", ""),
+                comparison.get("us_catalog_value", ""),
+                analysis.get("status", ""),
+                analysis.get("consensus_value", ""),
+                analysis.get("outlier_system", ""),
+                analysis.get("recommendation", ""),
+                analysis.get("confidence", ""),
+            ]
+        )
+
+    _append_product_corrections_sheet(workbook, summary_data.get("product_corrections", []))
 
     workbook.save(report_path)
     return report_path.name

@@ -22,11 +22,13 @@ class FieldMapper:
             {
                 "key": "conductors",
                 "display": "Conductors",
-                "trackvia": "part_conductors",
-                "directus": "part_conductors",
-                "german": None,
-                "us_catalog": None,
+                "trackvia": None,
+                "directus": None,
+                "german": "No. of cores",
+                "us_catalog": "Conductors",
                 "source_of_truth": "German",
+                "trackvia_fields": ["part_cond_no_ground", "part_cond_with_ground"],
+                "directus_fields": ["part_cond_no_ground", "part_cond_with_ground"],
             },
             {
                 "key": "ground_wire",

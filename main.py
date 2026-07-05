@@ -180,8 +180,24 @@ async def audit(
         directus_contents, directus_filename = uploaded_files["directus_csv"]
         trackvia_df = _load_dataframe(trackvia_contents, trackvia_filename)
         directus_df = _load_dataframe(directus_contents, directus_filename)
+        german_df = None
+        us_catalog_df = None
 
-        engine = AuditEngine(trackvia_df=trackvia_df, directus_df=directus_df, audit_type=audit_type)
+        if "german_engineering_csv" in uploaded_files:
+            german_contents, german_filename = uploaded_files["german_engineering_csv"]
+            german_df = _load_dataframe(german_contents, german_filename)
+
+        if "us_catalog_csv" in uploaded_files:
+            us_catalog_contents, us_catalog_filename = uploaded_files["us_catalog_csv"]
+            us_catalog_df = _load_dataframe(us_catalog_contents, us_catalog_filename)
+
+        engine = AuditEngine(
+            trackvia_df=trackvia_df,
+            directus_df=directus_df,
+            german_df=german_df,
+            us_catalog_df=us_catalog_df,
+            audit_type=audit_type,
+        )
         audit_result = engine.run()
         comparison_html = audit_result["comparison_html"]
         report_filename = audit_result["report_filename"]
