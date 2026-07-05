@@ -1,0 +1,14 @@
+German DataFrame columns: ['item no.', 'No. of cores', 'AWG', 'Largest single', 'Outer-¿- in', 'Outer-¿- mm', 'Copper figure', 'Cable weight Ålb/1000 ft', 'Cable weight Åkg/km', 'Unnamed: 9']
+US Catalog DataFrame columns: ['Part #', 'AWG', 'Conductors', 'OD In', 'OD mm', 'Cable weight Lbs']
+First AuditRecord: AuditRecord(sku='2042002', german_part=None, trackvia_row={'Record ID': 'Part #: 02042002', 'sku': 2042002, 'part_german': nan, 'part_gauge': 20, 'part_mm_2': 0.5, 'part_conductor_count_old': 2, 'part_pair_count': nan, 'part_triples': nan, '_pn_awg_c': nan, 'part_awg_pair': nan, 'part_drain_wire_awg': nan, 'part_ground_wire_awg': nan, 'part_data_conductors': nan, 'part_power_conductors': nan, 'part_pairs_shielded': nan, 'od_in': 0.209, 'part_od_inches': nan, 'part_od_mm': nan, 'part_od_inches_10': 0.209, 'part_od_mm_10': 5.3, 'part_od_10': '0.209 in. (5.3 mm)', 'part_copper_lbs_calc': 6.45024, 'part_copper_kg': 9.6, 'part_cable_weight': 28, 'part_weight_kg_100m': 42, 'part_tensile_strength': nan, 'part_suspension_load': nan, 'series_name': 'CC 600', 'part_ampere_30C': nan, 'type': 'Flexible Control Cables', 'part_ohmic_resistance_20c': nan, 'link_to_product_group': 40, '_pn_order#': 1, 'part_dc_resistance_20c': nan, 'part_ohmic_28_awg': nan, 'part_ohmic_26_awg': nan, 'part_ohmic_24_awg': nan}, directus_row={'name': 'Part #: 02042002', 'status': 'published', 'sku': 2042002, 'link_to_product_group': 40, 'id': 12228, 'part_gauge': 20, 'part_cond_no_ground': 2.0, 'part_cond_with_ground': nan, 'part_pair_count': nan, 'part_triples': nan, 'part_od_inches_10': 0.209, 'part_od_mm_10': 5.3, 'part_od_inches': nan, 'part_od_mm': nan, 'part_cable_weight': 28, 'part_weight_kg_100m': nan}, german_row=None, us_catalog_row=None)
+german_row populated: False
+us_catalog_row populated: False
+German lookup key: 2042002
+US Catalog lookup key: 2042002
+AWG lookup information:
+  German field name: AWG
+  German key exists in row: False
+  German value returned: 
+  US Catalog field name: AWG
+  US Catalog key exists in row: False
+  US Catalog value returned: 
