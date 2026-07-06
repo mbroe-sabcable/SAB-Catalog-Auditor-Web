@@ -5,8 +5,7 @@ import pandas as pd
 from openpyxl import Workbook
 
 import audits.four_way_comparison as four_way_comparison_module
-from audits.audit_rules import AuditRules
-from audits.four_way_comparison import build_four_way_comparisons
+from audits.four_way_comparison import FourWayComparison
 from audits.part_number import build_part_number_mapping
 from audits.specifications import compare_specifications
 from audits.unified_record_builder import AuditRecord, UnifiedRecordBuilder
@@ -191,6 +190,7 @@ class AuditEngine:
         self.audit_type = audit_type
         self.field_mapper = FieldMapper()
         self.records = UnifiedRecordBuilder.build(trackvia_df, directus_df, german_df, us_catalog_df)
+        self.four_way_comparisons = []
 
     def _write_debug_file(self):
         debug_path = Path(__file__).resolve().parent.parent / "reports" / "debug.txt"
@@ -332,15 +332,8 @@ class AuditEngine:
         enriched_mismatches = []
         for mismatch in mismatches:
             field_mapping = self.field_mapper.get_mapping(mismatch.get("field_key")) if mismatch.get("field_key") else None
-            field_key = mismatch.get("field_key")
-            source_of_truth = AuditRules.get_source_of_truth(
-                field_key,
-                bool(self.german_df is not None and not self.german_df.empty),
-            )
-            german_value = ""
-
-            if field_key in AuditRules.ENGINEERING_FIELDS:
-                german_value = self._get_german_value_for_field(mismatch.get("sku", ""), field_mapping)
+            source_of_truth = field_mapping.get("source_of_truth", "") if field_mapping else ""
+            german_value = self._get_german_value_for_field(mismatch.get("sku", ""), field_mapping)
 
             enriched_mismatches.append(
                 {
@@ -705,8 +698,9 @@ class AuditEngine:
         )
 
     def run(self):
-        self._write_debug_file()
-        comparison_html = self._build_part_number_comparison_html()
+        comparisons = FourWayComparison().compare(self.records)
+        self.four_way_comparisons = comparisons
+
         report_filename = ""
 
         if self.trackvia_df is not None and self.directus_df is not None:
@@ -716,47 +710,38 @@ class AuditEngine:
             trackvia_column = self._get_mapped_column(self.trackvia_df, "trackvia")
             directus_column = self._get_mapped_column(self.directus_df, "directus")
             tier1_summary = self._build_tier1_field_summary(mismatches)
-            recommendation_payload = self._build_recommendation_mismatches(mismatches)
-            recommended_corrections = build_correction_recommendations(recommendation_payload)
-            audit_records_for_outlier_analysis = self._prepare_audit_records_for_outlier_analysis()
-            four_way_comparisons = build_four_way_comparisons(
-                audit_records_for_outlier_analysis,
-                self.field_mapper,
-                trackvia_df=self.trackvia_df,
-                directus_df=self.directus_df,
-                german_df=self.german_df,
-                us_catalog_df=self.us_catalog_df,
-            )
-            product_corrections = self._build_product_corrections(
-                recommended_corrections,
-                four_way_comparisons,
-                missing_from_directus,
-                missing_from_trackvia,
-            )
 
-            report_filename = excel_report_module.write_audit_report(
-                {
-                    "audit_type": self.audit_type,
-                    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "matching_count": len(
-                        set(self._unique_values(self.trackvia_df, trackvia_column))
-                        & set(self._unique_values(self.directus_df, directus_column))
-                    ),
-                    "missing_from_directus_count": len(missing_from_directus),
-                    "missing_from_trackvia_count": len(missing_from_trackvia),
-                    "total_mismatches": len(mismatches),
-                    "missing_from_directus": missing_from_directus,
-                    "missing_from_trackvia": missing_from_trackvia,
-                    "mismatches": mismatches,
-                    "part_number_mapping": part_number_mapping,
-                    "tier1_summary": tier1_summary,
-                    "recommended_corrections": recommended_corrections,
-                    "four_way_comparisons": four_way_comparisons,
-                    "product_corrections": product_corrections,
-                }
-            )
+            summary_data = {
+                "audit_type": self.audit_type,
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "matching_count": len(
+                    set(self._unique_values(self.trackvia_df, trackvia_column))
+                    & set(self._unique_values(self.directus_df, directus_column))
+                ),
+                "missing_from_directus_count": len(missing_from_directus),
+                "missing_from_trackvia_count": len(missing_from_trackvia),
+                "total_mismatches": len(mismatches),
+                "missing_from_directus": missing_from_directus,
+                "missing_from_trackvia": missing_from_trackvia,
+                "mismatches": mismatches,
+                "part_number_mapping": part_number_mapping,
+                "tier1_summary": tier1_summary,
+                "recommended_corrections": [],
+                "product_corrections": [],
+            }
+            summary_data["four_way_comparisons"] = self.four_way_comparisons
+            if summary_data["four_way_comparisons"]:
+                print("================ FIRST SUMMARY COMPARISON ================")
+                print()
+                print(summary_data["four_way_comparisons"][0])
+                print()
+                print("==========================================================")
+            print("EXCEL MODULE:")
+            print(excel_report_module.__file__)
+            report_filename = excel_report_module.write_audit_report(summary_data)
 
         return {
-            "comparison_html": comparison_html,
+            "comparison_html": "",
             "report_filename": report_filename,
+            "four_way_comparisons": self.four_way_comparisons,
         }

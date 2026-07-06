@@ -30,6 +30,15 @@ class UnifiedRecordBuilder:
                     return column
             return None
 
+        def _format_german_lookup_key(value):
+            if value is None:
+                return ""
+
+            if hasattr(value, "is_integer") and value.is_integer():
+                return str(int(value))
+
+            return str(value).strip()
+
         trackvia_column = None
         directus_column = None
         german_column = None
@@ -61,13 +70,13 @@ class UnifiedRecordBuilder:
         german_lookup = {}
         if german_df is not None and german_column is not None:
             for _, row in german_df.iterrows():
-                german_part = str(row[german_column]).strip() if row[german_column] is not None else ""
+                german_part = _format_german_lookup_key(row[german_column])
                 german_lookup[german_part] = row
 
         us_catalog_lookup = {}
         if us_catalog_df is not None and us_catalog_column is not None:
             for _, row in us_catalog_df.iterrows():
-                us_part_number = str(row[us_catalog_column]).strip() if row[us_catalog_column] is not None else ""
+                us_part_number = _format_german_lookup_key(row[us_catalog_column])
                 us_catalog_lookup[us_part_number] = row
 
         for sku, row in trackvia_lookup.items():
@@ -92,12 +101,17 @@ class UnifiedRecordBuilder:
                 directus_row_dict = directus_row.to_dict() if hasattr(directus_row, "to_dict") else None
 
             german_lookup_key = part_german_value if part_german_value else sku
-            if german_lookup_key and german_lookup_key in german_lookup:
-                german_row = german_lookup[german_lookup_key]
-                german_row_dict = german_row.to_dict() if hasattr(german_row, "to_dict") else None
+            german_lookup_contains_key = bool(german_lookup_key and german_lookup_key in german_lookup)
 
-            if trackvia_value and trackvia_value in us_catalog_lookup:
-                us_catalog_row = us_catalog_lookup[trackvia_value]
+            us_lookup_key = trackvia_value
+            us_lookup_contains_key = bool(us_lookup_key and us_lookup_key in us_catalog_lookup)
+
+            german_row_dict = german_lookup.get(german_lookup_key)
+            if german_row_dict is not None:
+                german_row_dict = german_row_dict.to_dict() if hasattr(german_row_dict, "to_dict") else german_row_dict
+
+            if us_lookup_contains_key:
+                us_catalog_row = us_catalog_lookup[us_lookup_key]
                 us_catalog_row_dict = us_catalog_row.to_dict() if hasattr(us_catalog_row, "to_dict") else None
 
             audit_record = AuditRecord(
@@ -108,6 +122,13 @@ class UnifiedRecordBuilder:
                 german_row=german_row_dict,
                 us_catalog_row=us_catalog_row_dict,
             )
+
+            print("Assigned german_row:")
+            print(german_row_dict is not None)
+            print()
+            print("Assigned us_catalog_row:")
+            print(us_catalog_row_dict is not None)
+            print()
 
             records.append(audit_record)
 

@@ -61,6 +61,7 @@ def _append_product_corrections_sheet(workbook, product_corrections):
 
 
 def write_audit_report(summary_data):
+    print("ENTERED write_audit_report")
     output_dir = _build_output_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = output_dir / f"Audit_{timestamp}.xlsx"
@@ -110,58 +111,31 @@ def write_audit_report(summary_data):
     for german_number, us_number in summary_data.get("part_number_mapping", {}).items():
         mapping_sheet.append([german_number, us_number])
 
-    corrections_sheet = workbook.create_sheet("Recommended Corrections")
-    corrections_sheet.append(["SKU", "System", "Field", "Current Value", "Correct Value", "Reason"])
-    for correction in summary_data.get("recommended_corrections", []):
-        corrections_sheet.append(
-            [
-                correction.get("sku", ""),
-                correction.get("system", ""),
-                correction.get("field", ""),
-                correction.get("current_value", ""),
-                correction.get("correct_value", ""),
-                correction.get("reason", ""),
-            ]
-        )
-
     four_way_sheet = workbook.create_sheet("Four-Way Comparison")
-    four_way_sheet.append(["SKU", "Field", "German", "TrackVia", "Directus", "US Catalog", "Status"])
+    four_way_sheet.append(["SKU", "Field", "German Engineering", "TrackVia", "Directus", "US Catalog", "Status"])
+    four_way_comparisons = summary_data.get("four_way_comparisons", [])
+    if four_way_comparisons:
+        print("================ EXCEL INPUT ================")
+        print()
+        print("Number of comparisons:")
+        print(len(summary_data["four_way_comparisons"]))
+        print()
+        print("First comparison:")
+        print(summary_data["four_way_comparisons"][0])
+        print()
+        print("=============================================")
     for comparison in summary_data.get("four_way_comparisons", []):
         four_way_sheet.append(
             [
                 comparison.get("sku", ""),
                 comparison.get("field", ""),
-                comparison.get("german_value", ""),
-                comparison.get("trackvia_value", ""),
-                comparison.get("directus_value", ""),
-                comparison.get("us_catalog_value", ""),
+                comparison.get("german", ""),
+                comparison.get("trackvia", ""),
+                comparison.get("directus", ""),
+                comparison.get("us_catalog", ""),
                 comparison.get("status", ""),
             ]
         )
-
-    outlier_sheet = workbook.create_sheet("Outlier Analysis")
-    outlier_sheet.append(["SKU", "Field", "German", "TrackVia", "Directus", "US Catalog", "Status", "Consensus Value", "Outlier System", "Recommendation", "Confidence"])
-    for comparison in summary_data.get("four_way_comparisons", []):
-        analysis = comparison.get("analysis", {})
-        if analysis.get("status") in {"PASS", ""}:
-            continue
-        outlier_sheet.append(
-            [
-                comparison.get("sku", ""),
-                comparison.get("field", ""),
-                comparison.get("german_value", ""),
-                comparison.get("trackvia_value", ""),
-                comparison.get("directus_value", ""),
-                comparison.get("us_catalog_value", ""),
-                analysis.get("status", ""),
-                analysis.get("consensus_value", ""),
-                analysis.get("outlier_system", ""),
-                analysis.get("recommendation", ""),
-                analysis.get("confidence", ""),
-            ]
-        )
-
-    _append_product_corrections_sheet(workbook, summary_data.get("product_corrections", []))
 
     workbook.save(report_path)
     return report_path.name
