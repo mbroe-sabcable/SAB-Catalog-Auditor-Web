@@ -178,8 +178,6 @@ if not getattr(four_way_comparison_module, "_outlier_reporting_patched", False):
     four_way_comparison_module._build_outlier_analysis_html = _build_outlier_analysis_html
     four_way_comparison_module._outlier_reporting_patched = True
 
-excel_report_module.write_audit_report = _write_audit_report_with_outlier_columns
-
 
 class AuditEngine:
     def __init__(self, trackvia_df=None, directus_df=None, german_df=None, us_catalog_df=None, audit_type="Full Product Family Audit"):
