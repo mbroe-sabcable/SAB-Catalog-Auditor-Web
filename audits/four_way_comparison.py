@@ -154,7 +154,12 @@ class FourWayComparison:
                 german_row = record.german_row
                 us_catalog_row = record.us_catalog_row
 
-                if field_key in {"conductors", "pair_count", "triples"}:
+                if field_key == "awg":
+                    german_value = german_row.get(german_column) if german_row is not None and german_column else None
+                    trackvia_value = trackvia_row.get("part_gauge") if trackvia_row is not None else None
+                    directus_value = directus_row.get("part_gauge") if directus_row is not None else None
+                    us_catalog_value = us_catalog_row.get(us_catalog_column) if us_catalog_row is not None and us_catalog_column else None
+                elif field_key in {"conductors", "pair_count", "triples"}:
                     german_cores_value = german_row.get("No. of cores") if german_row is not None else None
                     german_parsed = self._parse_german_cores(german_cores_value)
                     german_value = german_parsed.get(field_key)
@@ -180,6 +185,11 @@ class FourWayComparison:
                     trackvia_value = self._first_populated_raw(trackvia_row, ["part_od_mm", "part_od_mm_10", "part_od_mm_range"])
                     directus_value = self._first_populated_raw(directus_row, ["part_od_mm", "part_od_mm_10", "part_od_mm_range"])
                     us_catalog_value = us_catalog_row.get("OD mm") if us_catalog_row is not None else None
+                elif field_key == "cable_weight":
+                    german_value = german_row.get("Cable weight Ålb/1000 ft") if german_row is not None else None
+                    trackvia_value = trackvia_row.get("part_cable_weight") if trackvia_row is not None else None
+                    directus_value = directus_row.get("part_cable_weight") if directus_row is not None else None
+                    us_catalog_value = us_catalog_row.get("Cable weight Lbs") if us_catalog_row is not None else None
                 else:
                     german_value = german_row.get(german_column) if german_row is not None and german_column else None
                     trackvia_value = trackvia_row.get(trackvia_column) if trackvia_row is not None and trackvia_column else None
