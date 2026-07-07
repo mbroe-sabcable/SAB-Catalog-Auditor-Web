@@ -61,7 +61,6 @@ def _append_product_corrections_sheet(workbook, product_corrections):
 
 
 def write_audit_report(summary_data):
-    print("ENTERED write_audit_report")
     output_dir = _build_output_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = output_dir / f"Audit_{timestamp}.xlsx"
@@ -114,16 +113,14 @@ def write_audit_report(summary_data):
     four_way_sheet = workbook.create_sheet("Four-Way Comparison")
     four_way_sheet.append(["SKU", "Field", "German Engineering", "TrackVia", "Directus", "US Catalog", "Status"])
     four_way_comparisons = summary_data.get("four_way_comparisons", [])
-    if four_way_comparisons:
-        print("================ EXCEL INPUT ================")
-        print()
-        print("Number of comparisons:")
-        print(len(summary_data["four_way_comparisons"]))
-        print()
-        print("First comparison:")
-        print(summary_data["four_way_comparisons"][0])
-        print()
-        print("=============================================")
+    awg_comparison = next((comparison for comparison in four_way_comparisons if comparison.get("field") == "AWG"), None)
+    if awg_comparison is not None:
+        print(awg_comparison)
+
+    conductors_comparison = next((comparison for comparison in four_way_comparisons if comparison.get("field") == "Conductors"), None)
+    if conductors_comparison is not None:
+        print(conductors_comparison)
+
     for comparison in summary_data.get("four_way_comparisons", []):
         four_way_sheet.append(
             [
