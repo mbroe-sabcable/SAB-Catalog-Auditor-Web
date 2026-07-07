@@ -38,9 +38,28 @@ class FourWayComparison:
         for field_name in field_names:
             if field_name not in row:
                 continue
-            resolved = self._to_number(row.get(field_name))
+
+            value = row.get(field_name)
+
+            if value is None:
+                continue
+
+            if isinstance(value, float) and math.isnan(value):
+                continue
+
+            if isinstance(value, str) and not value.strip():
+                continue
+
+            try:
+                if value != value:
+                    continue
+            except Exception:
+                pass
+
+            resolved = self._to_number(value)
             if resolved is not None:
                 return resolved
+
         return None
 
     def _first_populated_raw(self, row, field_names):
@@ -165,8 +184,20 @@ class FourWayComparison:
                     german_value = german_parsed.get(field_key)
 
                     if field_key == "conductors":
-                        trackvia_value = self._first_populated_numeric(trackvia_row, ["part_conductor_count_old"])
-                        directus_value = self._first_populated_numeric(directus_row, ["part_cond_no_ground", "part_cond_with_ground"])
+                        conductor_fields = [
+                            "part_cond_no_ground",
+                            "part_cond_with_ground",
+                        ]
+
+                        trackvia_value = self._first_populated_numeric(
+                            trackvia_row,
+                            conductor_fields,
+                        )
+
+                        directus_value = self._first_populated_numeric(
+                            directus_row,
+                            conductor_fields,
+                        )
                     elif field_key == "pair_count":
                         trackvia_value = self._first_populated_numeric(trackvia_row, ["part_pair_count"])
                         directus_value = self._first_populated_numeric(directus_row, ["part_pair_count"])
