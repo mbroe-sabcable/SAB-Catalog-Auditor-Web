@@ -87,11 +87,9 @@ class UnifiedRecordBuilder:
             trackvia_row_dict = row.to_dict() if hasattr(row, "to_dict") else None
             part_german_column = _get_column_by_expected_name(trackvia_df, "part_german")
             part_german_raw = row[part_german_column] if part_german_column is not None else None
-            if part_german_raw is None:
+            part_german_value = _format_german_lookup_key(part_german_raw)
+            if not part_german_value or part_german_value.lower() == "nan":
                 part_german_value = None
-            else:
-                part_german_text = str(part_german_raw).strip()
-                part_german_value = part_german_text if part_german_text and part_german_text.lower() != "nan" else None
             directus_row_dict = None
             german_row_dict = None
             us_catalog_row_dict = None

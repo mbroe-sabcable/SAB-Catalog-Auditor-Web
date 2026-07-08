@@ -143,6 +143,53 @@ class FourWayComparison:
         except ValueError:
             return text
 
+
+    def _compare_generic(self, german, trackvia, directus, us_catalog):
+        populated = [
+            self._normalize_for_comparison(v)
+            for v in [german, trackvia, directus, us_catalog]
+            if v is not None
+        ]
+        return {
+            "status": "PASS" if len(set(populated)) <= 1 else "FAIL",
+            "reason": "",
+        }
+
+    def _compare_part_number(self, record, german, trackvia, directus, us_catalog):
+        german_value = "" if german is None else str(german).strip()
+        if german_value.endswith(".0"):
+            german_value = german_value[:-2]
+
+        mapped_value = "" if record.german_part is None else str(record.german_part).strip()
+        if mapped_value.endswith(".0"):
+            mapped_value = mapped_value[:-2]
+
+        if german_value != mapped_value:
+            return {
+                "status": "FAIL",
+                "reason": "German Engineering PN does not match TrackVia part_german",
+            }
+
+        us_values = [v for v in [trackvia, directus, us_catalog] if v is not None]
+
+        if len(set(us_values)) > 1:
+            return {
+                "status": "FAIL",
+                "reason": "US systems do not agree on the part number",
+            }
+
+        if us_values and us_values[0] != record.sku:
+            return {
+                "status": "FAIL",
+                "reason": "US part number does not match TrackVia SKU",
+            }
+
+        return {
+            "status": "PASS",
+            "reason": "",
+        }
+
+
     def compare(self, records):
         mapper = FieldMapper()
         comparisons = []
@@ -179,11 +226,10 @@ class FourWayComparison:
                     directus_value = directus_row.get("part_gauge") if directus_row is not None else None
                     us_catalog_value = us_catalog_row.get(us_catalog_column) if us_catalog_row is not None and us_catalog_column else None
                 elif field_key in {"conductors", "pair_count", "triples"}:
-                    german_cores_value = german_row.get("No. of cores") if german_row is not None else None
-                    german_parsed = self._parse_german_cores(german_cores_value)
-                    german_value = german_parsed.get(field_key)
-
                     if field_key == "conductors":
+                        german_cores_value = german_row.get("No. of cores") if german_row is not None else None
+                        german_parsed = self._parse_german_cores(german_cores_value)
+                        german_value = german_parsed.get(field_key)
                         conductor_fields = [
                             "part_cond_no_ground",
                             "part_cond_with_ground",
@@ -199,9 +245,11 @@ class FourWayComparison:
                             conductor_fields,
                         )
                     elif field_key == "pair_count":
+                        german_value = self._to_number(german_row.get("Pairs")) if german_row is not None else None
                         trackvia_value = self._first_populated_numeric(trackvia_row, ["part_pair_count"])
                         directus_value = self._first_populated_numeric(directus_row, ["part_pair_count"])
                     else:
+                        german_value = self._to_number(german_row.get("Triples")) if german_row is not None else None
                         trackvia_value = self._first_populated_numeric(trackvia_row, ["part_triples"])
                         directus_value = self._first_populated_numeric(directus_row, ["part_triples"])
 
@@ -227,12 +275,24 @@ class FourWayComparison:
                     directus_value = directus_row.get(directus_column) if directus_row is not None and directus_column else None
                     us_catalog_value = us_catalog_row.get(us_catalog_column) if us_catalog_row is not None and us_catalog_column else None
 
-                populated_values = [
-                    self._normalize_for_comparison(value)
-                    for value in [german_value, trackvia_value, directus_value, us_catalog_value]
-                    if value is not None
-                ]
-                status = "PASS" if len(set(populated_values)) <= 1 else "FAIL"
+                if field_key == "part_number":
+                    result = self._compare_part_number(
+                        record,
+                        german_value,
+                        trackvia_value,
+                        directus_value,
+                        us_catalog_value,
+                    )
+                else:
+                    result = self._compare_generic(
+                        german_value,
+                        trackvia_value,
+                        directus_value,
+                        us_catalog_value,
+                    )
+
+                status = result["status"]
+                reason = result["reason"]
 
                 comparisons.append(
                     {
@@ -243,6 +303,7 @@ class FourWayComparison:
                         "directus": directus_value,
                         "us_catalog": us_catalog_value,
                         "status": status,
+                        "reason": reason,
                     }
                 )
 
