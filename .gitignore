@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Microsoft Office temp files
+~$*
+
+# Generated audit reports
+reports/output/

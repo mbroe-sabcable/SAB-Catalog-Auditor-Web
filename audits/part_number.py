@@ -1,4 +1,7 @@
 import pandas as pd
+import re
+
+from audits.unified_record_builder import UnifiedRecordBuilder
 
 
 def _normalize_column_name(column_name):
@@ -28,8 +31,25 @@ def build_part_number_mapping(trackvia_df):
 
     mapping = {}
     for _, row in trackvia_df.iterrows():
-        german_value = str(row[german_column]).strip() if pd.notna(row[german_column]) else ""
-        sku_value = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ""
+        german_value = UnifiedRecordBuilder.normalize_part_number(row[german_column]) if pd.notna(row[german_column]) else ""
+        sku_value = UnifiedRecordBuilder.normalize_part_number(row[sku_column]) if pd.notna(row[sku_column]) else ""
+
+        # Preserve leading zeros in the exported German mapping when available in
+        # the textual record identifier while still using normalized join values.
+        record_id_column = _find_column(trackvia_df, ["Record ID"])
+        if record_id_column is not None and pd.notna(row[record_id_column]):
+            record_id_text = str(row[record_id_column]).strip()
+            match = re.search(r"\d+", record_id_text)
+            if match:
+                record_id_digits = match.group(0)
+                if (
+                    record_id_digits.startswith("0")
+                    and UnifiedRecordBuilder.normalize_part_number(record_id_digits) == german_value
+                ):
+                    german_value = UnifiedRecordBuilder.normalize_part_number(
+                        record_id_digits,
+                        preserve_leading_zeros=True,
+                    )
 
         if not german_value:
             continue

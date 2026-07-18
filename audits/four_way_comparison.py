@@ -4,6 +4,49 @@ import re
 
 
 class FourWayComparison:
+    def _normalize_part_number(self, value):
+        if value is None:
+            return ""
+
+        if isinstance(value, float) and math.isnan(value):
+            return ""
+
+        try:
+            is_nan_like = value != value
+            if isinstance(is_nan_like, bool) and is_nan_like:
+                return ""
+        except Exception:
+            pass
+
+        text = str(value).strip()
+        if not text:
+            return ""
+
+        normalized = text.replace(",", "")
+
+        # Canonicalize purely numeric representations so int/float/string
+        # versions of the same part number compare equal.
+        if re.fullmatch(r"[+-]?\d+(?:\.\d+)?", normalized):
+            sign = ""
+            number = normalized
+            if number.startswith(("+", "-")):
+                sign = number[0]
+                number = number[1:]
+
+            if "." in number:
+                whole, fraction = number.split(".", 1)
+                if not fraction or set(fraction) <= {"0"}:
+                    number = whole
+                else:
+                    number = f"{whole}.{fraction.rstrip('0')}"
+
+            if "." not in number:
+                number = number.lstrip("0") or "0"
+
+            return f"{sign}{number}"
+
+        return text
+
     def _to_number(self, value):
         if value is None:
             return None
@@ -155,33 +198,56 @@ class FourWayComparison:
             "reason": "",
         }
 
-    def _compare_part_number(self, record, german, trackvia, directus, us_catalog):
-        german_value = "" if german is None else str(german).strip()
-        if german_value.endswith(".0"):
-            german_value = german_value[:-2]
+    def _compare_us_part_number(self, german, trackvia, directus, us_catalog):
+        german_value = self._normalize_part_number(german)
+        trackvia_value = self._normalize_part_number(trackvia)
+        directus_value = self._normalize_part_number(directus)
+        us_catalog_value = self._normalize_part_number(us_catalog)
 
-        mapped_value = "" if record.german_part is None else str(record.german_part).strip()
-        if mapped_value.endswith(".0"):
-            mapped_value = mapped_value[:-2]
+        required_values = [
+            ("TrackVia", trackvia_value),
+            ("Directus", directus_value),
+            ("US Catalog", us_catalog_value),
+        ]
 
-        if german_value != mapped_value:
+        for system_name, value in required_values:
+            if not value:
+                return {
+                    "status": "FAIL",
+                    "reason": f"Missing US Part Number in {system_name}",
+                }
+
+        populated = [
+            value
+            for value in [german_value, trackvia_value, directus_value, us_catalog_value]
+            if value
+        ]
+
+        if len(set(populated)) > 1:
             return {
                 "status": "FAIL",
-                "reason": "German Engineering PN does not match TrackVia part_german",
+                "reason": "US Part Number mismatch between systems",
             }
 
-        us_values = [v for v in [trackvia, directus, us_catalog] if v is not None]
+        return {
+            "status": "PASS",
+            "reason": "",
+        }
 
-        if len(set(us_values)) > 1:
+    def _compare_german_part_number(self, german_item_no, trackvia_part_german):
+        german_value = self._normalize_part_number(german_item_no)
+        trackvia_value = self._normalize_part_number(trackvia_part_german)
+
+        if german_value and not trackvia_value:
             return {
                 "status": "FAIL",
-                "reason": "US systems do not agree on the part number",
+                "reason": "Missing German Part Number in TrackVia",
             }
 
-        if us_values and us_values[0] != record.sku:
+        if german_value != trackvia_value:
             return {
                 "status": "FAIL",
-                "reason": "US part number does not match TrackVia SKU",
+                "reason": "Incorrect German Part Number in TrackVia",
             }
 
         return {
@@ -195,7 +261,8 @@ class FourWayComparison:
         comparisons = []
 
         field_definitions = [
-            ("part_number", "Part Number"),
+            ("us_part_number", "US Part Number"),
+            ("german_part_number", "German Part Number"),
             ("awg", "AWG"),
             ("conductors", "Conductors"),
             ("pair_count", "Pairs"),
@@ -220,7 +287,17 @@ class FourWayComparison:
                 german_row = record.german_row
                 us_catalog_row = record.us_catalog_row
 
-                if field_key == "awg":
+                if field_key == "us_part_number":
+                    german_value = self._normalize_part_number(record.sku)
+                    trackvia_value = self._normalize_part_number(trackvia_row.get("sku") if trackvia_row is not None else None)
+                    directus_value = self._normalize_part_number(directus_row.get("sku") if directus_row is not None else None)
+                    us_catalog_value = self._normalize_part_number(us_catalog_row.get("Part #") if us_catalog_row is not None else None)
+                elif field_key == "german_part_number":
+                    german_value = self._normalize_part_number(german_row.get("item no.") if german_row is not None else None)
+                    trackvia_value = self._normalize_part_number(trackvia_row.get("part_german") if trackvia_row is not None else None)
+                    directus_value = "N/A"
+                    us_catalog_value = "N/A"
+                elif field_key == "awg":
                     german_value = german_row.get(german_column) if german_row is not None and german_column else None
                     trackvia_value = trackvia_row.get("part_gauge") if trackvia_row is not None else None
                     directus_value = directus_row.get("part_gauge") if directus_row is not None else None
@@ -275,13 +352,17 @@ class FourWayComparison:
                     directus_value = directus_row.get(directus_column) if directus_row is not None and directus_column else None
                     us_catalog_value = us_catalog_row.get(us_catalog_column) if us_catalog_row is not None and us_catalog_column else None
 
-                if field_key == "part_number":
-                    result = self._compare_part_number(
-                        record,
+                if field_key == "us_part_number":
+                    result = self._compare_us_part_number(
                         german_value,
                         trackvia_value,
                         directus_value,
                         us_catalog_value,
+                    )
+                elif field_key == "german_part_number":
+                    result = self._compare_german_part_number(
+                        german_value,
+                        trackvia_value,
                     )
                 else:
                     result = self._compare_generic(
