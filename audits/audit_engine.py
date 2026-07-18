@@ -13,6 +13,8 @@ from importers.field_mapper import FieldMapper
 from reports import excel_report as excel_report_module
 from reports.correction_report import build_correction_recommendations
 
+normalize_part_number = UnifiedRecordBuilder.normalize_part_number
+
 
 def _build_outlier_analysis_html(outlier_rows):
     if not outlier_rows:
@@ -267,7 +269,7 @@ class AuditEngine:
         values = []
         seen = set()
         for value in df[column_name].dropna():
-            text = str(value).strip()
+            text = normalize_part_number(value)
             if text and text not in seen:
                 seen.add(text)
                 values.append(text)
@@ -306,16 +308,16 @@ class AuditEngine:
             return ""
 
         for _, row in self.trackvia_df.iterrows():
-            current_sku = str(row[trackvia_sku_column]).strip() if pd.notna(row[trackvia_sku_column]) else ""
+            current_sku = normalize_part_number(row[trackvia_sku_column]) if pd.notna(row[trackvia_sku_column]) else ""
             if current_sku != sku:
                 continue
 
-            german_part_number = str(row[trackvia_german_part_column]).strip() if pd.notna(row[trackvia_german_part_column]) else ""
+            german_part_number = normalize_part_number(row[trackvia_german_part_column]) if pd.notna(row[trackvia_german_part_column]) else ""
             if not german_part_number:
                 return ""
 
             for _, german_row in self.german_df.iterrows():
-                german_row_part_number = str(german_row[german_part_number_column]).strip() if pd.notna(german_row[german_part_number_column]) else ""
+                german_row_part_number = normalize_part_number(german_row[german_part_number_column]) if pd.notna(german_row[german_part_number_column]) else ""
                 if german_row_part_number != german_part_number:
                     continue
 
@@ -347,7 +349,7 @@ class AuditEngine:
         sku_lookup = {}
 
         for record in self.records:
-            sku = str(record.sku).strip() if record.sku is not None else ""
+            sku = normalize_part_number(record.sku) if record.sku is not None else ""
             if not sku:
                 continue
             sku_lookup[sku] = {
@@ -573,8 +575,8 @@ class AuditEngine:
 
         if german_column is not None and sku_column is not None:
             for _, row in self.trackvia_df.iterrows():
-                german_value = str(row[german_column]).strip() if pd.notna(row[german_column]) else ""
-                sku_value = str(row[sku_column]).strip() if pd.notna(row[sku_column]) else ""
+                german_value = normalize_part_number(row[german_column]) if pd.notna(row[german_column]) else ""
+                sku_value = normalize_part_number(row[sku_column]) if pd.notna(row[sku_column]) else ""
 
                 if not german_value:
                     continue
