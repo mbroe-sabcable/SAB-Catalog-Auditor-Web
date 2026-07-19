@@ -1,4 +1,5 @@
 from io import BytesIO
+from html import escape
 from pathlib import Path
 from typing import Optional
 
@@ -126,12 +127,22 @@ def _summarize_csv(contents: bytes, filename: str):
     return encoding, int(dataframe.shape[0]), int(dataframe.shape[1]), list(dataframe.columns)
 
 
-def _render_page(request, results, selected_audit_type, comparison_html="", report_filename=""):
+def _render_page(request, results, selected_audit_type, comparison_html="", report_filename="", source_status=None, audit_summary=None):
+    if source_status is None:
+        source_status = {
+            "german_engineering": False,
+            "trackvia": False,
+            "directus": False,
+            "us_catalog": False,
+        }
+
     html = templates.get_template("index.html").render(
         title="SAB Catalog Auditor",
         results=results,
         selected_audit_type=selected_audit_type,
         report_filename=report_filename,
+        source_status=source_status,
+        audit_summary=audit_summary,
     )
 
     if comparison_html:
@@ -175,21 +186,32 @@ async def audit(
 
     comparison_html = ""
     report_filename = ""
+    audit_summary = None
+    source_status = {
+        "german_engineering": "german_engineering_csv" in uploaded_files,
+        "trackvia": "trackvia_csv" in uploaded_files,
+        "directus": "directus_csv" in uploaded_files,
+        "us_catalog": "us_catalog_csv" in uploaded_files,
+    }
     if "trackvia_csv" in uploaded_files and "directus_csv" in uploaded_files:
         trackvia_contents, trackvia_filename = uploaded_files["trackvia_csv"]
         directus_contents, directus_filename = uploaded_files["directus_csv"]
         trackvia_df = _load_dataframe(trackvia_contents, trackvia_filename)
         directus_df = _load_dataframe(directus_contents, directus_filename)
+        trackvia_df.attrs["source_filename"] = trackvia_filename
+        directus_df.attrs["source_filename"] = directus_filename
         german_df = None
         us_catalog_df = None
 
         if "german_engineering_csv" in uploaded_files:
             german_contents, german_filename = uploaded_files["german_engineering_csv"]
             german_df = _load_dataframe(german_contents, german_filename)
+            german_df.attrs["source_filename"] = german_filename
 
         if "us_catalog_csv" in uploaded_files:
             us_catalog_contents, us_catalog_filename = uploaded_files["us_catalog_csv"]
             us_catalog_df = _load_dataframe(us_catalog_contents, us_catalog_filename)
+            us_catalog_df.attrs["source_filename"] = us_catalog_filename
 
         engine = AuditEngine(
             trackvia_df=trackvia_df,
@@ -201,6 +223,15 @@ async def audit(
         audit_result = engine.run()
         comparison_html = audit_result["comparison_html"]
         report_filename = audit_result["report_filename"]
+        summary_metrics = audit_result.get("summary_metrics", {})
+
+        audit_summary = {
+            "products_compared": f"{int(summary_metrics.get('products_compared', 0)):,}",
+            "missing_products": f"{int(summary_metrics.get('missing_products', 0)):,}",
+            "specification_mismatches": f"{int(summary_metrics.get('specification_mismatches', 0)):,}",
+            "corrections_generated": f"{int(summary_metrics.get('corrections_generated', 0)):,}",
+            "report_relative_path": f"reports/output/{report_filename}" if report_filename else "",
+        }
 
         if report_filename:
             comparison_html += (
@@ -209,7 +240,7 @@ async def audit(
                 '</div>'
             )
 
-    return _render_page(request, results, audit_type, comparison_html, report_filename)
+    return _render_page(request, results, audit_type, comparison_html, report_filename, source_status, audit_summary)
 
 
 @app.get("/download-report/{filename}")
@@ -223,3 +254,43 @@ async def download_report(filename: str):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=filename,
     )
+
+
+@app.get("/reports-output", response_class=HTMLResponse)
+async def reports_output_browser():
+    output_dir = Path("reports/output")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(
+        [path for path in output_dir.iterdir() if path.is_file()],
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not files:
+        body = (
+            "<h1>Reports Output</h1>"
+            "<p>No reports found in reports/output.</p>"
+            "<p><a href='/'>Back to Auditor</a></p>"
+        )
+        return HTMLResponse(content=body)
+
+    rows = []
+    for file_path in files:
+        filename = escape(file_path.name)
+        rows.append(
+            "<tr>"
+            f"<td>{filename}</td>"
+            f"<td><a href='/download-report/{filename}'>Open</a></td>"
+            "</tr>"
+        )
+
+    body = (
+        "<h1>Reports Output</h1>"
+        "<table border='1' cellpadding='8' cellspacing='0'>"
+        "<thead><tr><th>Filename</th><th>Action</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "<p><a href='/'>Back to Auditor</a></p>"
+    )
+    return HTMLResponse(content=body)

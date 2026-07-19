@@ -702,6 +702,12 @@ class AuditEngine:
         self.four_way_comparisons = comparisons
 
         report_filename = ""
+        summary_metrics = {
+            "products_compared": 0,
+            "missing_products": 0,
+            "specification_mismatches": 0,
+            "corrections_generated": 0,
+        }
 
         if self.trackvia_df is not None and self.directus_df is not None:
             missing_from_directus, missing_from_trackvia = self._find_missing_part_numbers(self.trackvia_df, self.directus_df)
@@ -710,14 +716,24 @@ class AuditEngine:
             trackvia_column = self._get_mapped_column(self.trackvia_df, "trackvia")
             directus_column = self._get_mapped_column(self.directus_df, "directus")
             tier1_summary = self._build_tier1_field_summary(mismatches)
+            recommendation_payload = self._build_recommendation_mismatches(mismatches)
+            recommended_corrections = build_correction_recommendations(recommendation_payload)
+            matching_count = len(
+                set(self._unique_values(self.trackvia_df, trackvia_column))
+                & set(self._unique_values(self.directus_df, directus_column))
+            )
 
             summary_data = {
                 "audit_type": self.audit_type,
                 "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "matching_count": len(
-                    set(self._unique_values(self.trackvia_df, trackvia_column))
-                    & set(self._unique_values(self.directus_df, directus_column))
-                ),
+                "app_version": "0.9.0",
+                "source_files": {
+                    "german_engineering": self.german_df.attrs.get("source_filename", "") if self.german_df is not None else "",
+                    "trackvia": self.trackvia_df.attrs.get("source_filename", "") if self.trackvia_df is not None else "",
+                    "directus": self.directus_df.attrs.get("source_filename", "") if self.directus_df is not None else "",
+                    "us_catalog": self.us_catalog_df.attrs.get("source_filename", "") if self.us_catalog_df is not None else "",
+                },
+                "matching_count": matching_count,
                 "missing_from_directus_count": len(missing_from_directus),
                 "missing_from_trackvia_count": len(missing_from_trackvia),
                 "total_mismatches": len(mismatches),
@@ -726,7 +742,7 @@ class AuditEngine:
                 "mismatches": mismatches,
                 "part_number_mapping": part_number_mapping,
                 "tier1_summary": tier1_summary,
-                "recommended_corrections": [],
+                "recommended_corrections": recommended_corrections,
                 "product_corrections": [],
             }
             summary_data["four_way_comparisons"] = self.four_way_comparisons
@@ -740,8 +756,16 @@ class AuditEngine:
             print(excel_report_module.__file__)
             report_filename = excel_report_module.write_audit_report(summary_data)
 
+            summary_metrics = {
+                "products_compared": matching_count,
+                "missing_products": len(missing_from_directus) + len(missing_from_trackvia),
+                "specification_mismatches": len(mismatches),
+                "corrections_generated": len(recommended_corrections),
+            }
+
         return {
             "comparison_html": "",
             "report_filename": report_filename,
             "four_way_comparisons": self.four_way_comparisons,
+            "summary_metrics": summary_metrics,
         }

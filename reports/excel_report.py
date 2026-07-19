@@ -2,14 +2,342 @@ from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from audits.unified_record_builder import UnifiedRecordBuilder
+
+
+HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
+HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+BODY_FONT = Font(name="Calibri", size=11, color="1F2937")
+TITLE_FONT = Font(name="Calibri", size=24, bold=True, color="1F4E78")
+SUBTITLE_FONT = Font(name="Calibri", size=16, bold=True, color="1F4E78")
+THIN_SIDE = Side(style="thin", color="D9D9D9")
+THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+
+
+def _set_cell(cell, value, font=None, fill=None, alignment=None, border=None):
+    cell.value = value
+    if font is not None:
+        cell.font = font
+    if fill is not None:
+        cell.fill = fill
+    if alignment is not None:
+        cell.alignment = alignment
+    if border is not None:
+        cell.border = border
 
 
 def _build_output_dir():
     output_dir = Path(__file__).resolve().parent / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+
+def _resolve_logo_path():
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    for filename in ("sab_logo.png", "SAB_logo.png"):
+        candidate = assets_dir / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _insert_logo(sheet):
+    logo_path = _resolve_logo_path()
+    if logo_path is None:
+        return
+
+    try:
+        image = Image(str(logo_path))
+        image.width = 200
+        image.height = 70
+        sheet.add_image(image, "B2")
+    except Exception:
+        # Keep the dashboard generation resilient if Pillow/image loading fails.
+        return
+
+
+def _parse_generated_datetime(summary_data):
+    generated_at = summary_data.get("generated_at", "")
+    if isinstance(generated_at, datetime):
+        return generated_at
+
+    if isinstance(generated_at, str) and generated_at.strip():
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.strptime(generated_at.strip(), fmt)
+            except ValueError:
+                continue
+
+    return datetime.now()
+
+
+def _extract_source_files(summary_data):
+    files = summary_data.get("source_files", {}) or {}
+    return {
+        "German Engineering": files.get("german_engineering") or summary_data.get("german_engineering_file", ""),
+        "TrackVia": files.get("trackvia") or summary_data.get("trackvia_file", ""),
+        "Directus": files.get("directus") or summary_data.get("directus_file", ""),
+        "US Catalog": files.get("us_catalog") or summary_data.get("us_catalog_file", ""),
+    }
+
+
+def _count_corrections(summary_data):
+    recommended = summary_data.get("recommended_corrections", []) or []
+    if recommended:
+        return len(recommended)
+
+    total = 0
+    for product in summary_data.get("product_corrections", []) or []:
+        total += int(product.get("total_corrections", 0) or 0)
+    return total
+
+
+def _compute_health_score(products_compared, missing_products, mismatches):
+    if products_compared <= 0:
+        return 100
+
+    issue_count = max(0, int(missing_products)) + max(0, int(mismatches))
+    issue_ratio = issue_count / max(int(products_compared), 1)
+    return max(0, min(100, round(100 - (issue_ratio * 100))))
+
+
+def _health_status(score):
+    if score >= 100:
+        return "Excellent", PatternFill(fill_type="solid", fgColor="70AD47")
+    if score >= 90:
+        return "Good", PatternFill(fill_type="solid", fgColor="92D050")
+    if score >= 75:
+        return "Fair", PatternFill(fill_type="solid", fgColor="FFD966")
+    return "Needs Attention", PatternFill(fill_type="solid", fgColor="F4B084")
+
+
+def _box_header(sheet, start_col, end_col, row, title):
+    sheet.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
+    cell = sheet.cell(row=row, column=start_col)
+    _set_cell(
+        cell,
+        title,
+        font=HEADER_FONT,
+        fill=HEADER_FILL,
+        alignment=Alignment(horizontal="left", vertical="center"),
+        border=THIN_BORDER,
+    )
+    for col in range(start_col + 1, end_col + 1):
+        sheet.cell(row=row, column=col).fill = HEADER_FILL
+        sheet.cell(row=row, column=col).border = THIN_BORDER
+
+
+def _box_rows(sheet, start_col, end_col, start_row, items):
+    row = start_row
+    for label, value in items:
+        sheet.merge_cells(start_row=row, start_column=start_col + 1, end_row=row, end_column=end_col)
+        _set_cell(
+            sheet.cell(row=row, column=start_col),
+            label,
+            font=Font(name="Calibri", size=11, bold=True, color="1F2937"),
+            alignment=Alignment(horizontal="left", vertical="center"),
+            border=THIN_BORDER,
+        )
+        _set_cell(
+            sheet.cell(row=row, column=start_col + 1),
+            value,
+            font=BODY_FONT,
+            alignment=Alignment(horizontal="left", vertical="center"),
+            border=THIN_BORDER,
+        )
+        for col in range(start_col + 2, end_col + 1):
+            sheet.cell(row=row, column=col).border = THIN_BORDER
+        row += 1
+
+
+def _autosize_columns(sheet):
+    for column_cells in sheet.columns:
+        max_length = 0
+        col_idx = column_cells[0].column
+        col_letter = get_column_letter(col_idx)
+        for cell in column_cells:
+            value = "" if cell.value is None else str(cell.value)
+            max_length = max(max_length, len(value))
+        sheet.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 45)
+
+
+def _style_table_sheet(sheet):
+    if sheet.max_row >= 1:
+        for cell in sheet[1]:
+            cell.font = HEADER_FONT
+            cell.fill = HEADER_FILL
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = THIN_BORDER
+
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=1, max_col=sheet.max_column):
+        for cell in row:
+            cell.font = BODY_FONT
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+            cell.border = THIN_BORDER
+
+    sheet.freeze_panes = "A2"
+    _autosize_columns(sheet)
+
+
+def _build_dashboard_sheet(workbook, summary_data):
+    dashboard = workbook.create_sheet("Dashboard")
+    workbook.move_sheet(dashboard, offset=-len(workbook.sheetnames) + 1)
+
+    for col, width in {
+        "A": 4,
+        "B": 22,
+        "C": 22,
+        "D": 22,
+        "E": 22,
+        "F": 4,
+        "G": 22,
+        "H": 22,
+        "I": 22,
+        "J": 22,
+    }.items():
+        dashboard.column_dimensions[col].width = width
+
+    _insert_logo(dashboard)
+
+    dashboard.merge_cells("D2:J2")
+    _set_cell(
+        dashboard["D2"],
+        "SAB North America",
+        font=TITLE_FONT,
+        alignment=Alignment(horizontal="left", vertical="center"),
+    )
+
+    dashboard.merge_cells("D3:J3")
+    _set_cell(
+        dashboard["D3"],
+        "Catalog Audit Report",
+        font=SUBTITLE_FONT,
+        alignment=Alignment(horizontal="left", vertical="center"),
+    )
+
+    generated_dt = _parse_generated_datetime(summary_data)
+    products_compared = int(summary_data.get("matching_count", 0) or 0)
+    missing_products = int(summary_data.get("missing_from_directus_count", 0) or 0) + int(summary_data.get("missing_from_trackvia_count", 0) or 0)
+    mismatches = int(summary_data.get("total_mismatches", 0) or 0)
+    corrections_generated = _count_corrections(summary_data)
+
+    _box_header(dashboard, 2, 5, 6, "Report Details")
+    _box_rows(
+        dashboard,
+        2,
+        5,
+        7,
+        [
+            ("Audit Type", summary_data.get("audit_type", "")),
+            ("Date Generated", generated_dt.strftime("%Y-%m-%d")),
+            ("Time Generated", generated_dt.strftime("%H:%M:%S")),
+            ("Application Version", summary_data.get("app_version", "1.0.0")),
+        ],
+    )
+
+    _box_header(dashboard, 7, 10, 6, "Source Files")
+    source_files = _extract_source_files(summary_data)
+    _box_rows(
+        dashboard,
+        7,
+        10,
+        7,
+        [
+            ("German Engineering", source_files.get("German Engineering", "") or ""),
+            ("TrackVia", source_files.get("TrackVia", "") or ""),
+            ("Directus", source_files.get("Directus", "") or ""),
+            ("US Catalog", source_files.get("US Catalog", "") or ""),
+        ],
+    )
+
+    _box_header(dashboard, 2, 5, 13, "Summary")
+    _box_rows(
+        dashboard,
+        2,
+        5,
+        14,
+        [
+            ("Products Compared", products_compared),
+            ("Missing Products", missing_products),
+            ("Specification Mismatches", mismatches),
+            ("Corrections Generated", corrections_generated),
+        ],
+    )
+
+    _box_header(dashboard, 7, 10, 13, "Audit Health")
+    health_score = _compute_health_score(products_compared, missing_products, mismatches)
+    health_label, health_fill = _health_status(health_score)
+    _box_rows(
+        dashboard,
+        7,
+        10,
+        14,
+        [
+            ("Health Score", f"{health_score}%"),
+            ("Status", health_label),
+        ],
+    )
+    for cell_ref in ("H14", "H15"):
+        dashboard[cell_ref].fill = health_fill
+        dashboard[cell_ref].font = Font(name="Calibri", size=11, bold=True, color="1F2937")
+
+    _box_header(dashboard, 2, 5, 20, "Worksheet Index")
+    dashboard.merge_cells("C21:E21")
+    _set_cell(
+        dashboard["B21"],
+        "Dashboard",
+        font=BODY_FONT,
+        alignment=Alignment(horizontal="left", vertical="center"),
+        border=THIN_BORDER,
+    )
+    _set_cell(
+        dashboard["C21"],
+        "Go to sheet",
+        font=Font(name="Calibri", size=11, color="0563C1", underline="single"),
+        alignment=Alignment(horizontal="left", vertical="center"),
+        border=THIN_BORDER,
+    )
+    dashboard["C21"].hyperlink = "#'Dashboard'!A1"
+    for col in range(4, 6):
+        dashboard.cell(row=21, column=col).border = THIN_BORDER
+
+    dashboard.freeze_panes = "A7"
+    return dashboard
+
+
+def _populate_dashboard_index(dashboard, workbook):
+    start_row = 22
+    index_row = start_row
+    for sheet_name in workbook.sheetnames:
+        if sheet_name == "Dashboard":
+            continue
+
+        dashboard.merge_cells(start_row=index_row, start_column=3, end_row=index_row, end_column=5)
+        _set_cell(
+            dashboard.cell(row=index_row, column=2),
+            sheet_name,
+            font=BODY_FONT,
+            alignment=Alignment(horizontal="left", vertical="center"),
+            border=THIN_BORDER,
+        )
+        link_cell = dashboard.cell(row=index_row, column=3)
+        _set_cell(
+            link_cell,
+            "Go to sheet",
+            font=Font(name="Calibri", size=11, color="0563C1", underline="single"),
+            alignment=Alignment(horizontal="left", vertical="center"),
+            border=THIN_BORDER,
+        )
+        link_cell.hyperlink = f"#'{sheet_name}'!A1"
+
+        for col in range(4, 6):
+            dashboard.cell(row=index_row, column=col).border = THIN_BORDER
+
+        index_row += 1
 
 
 def _append_product_corrections_sheet(workbook, product_corrections):
@@ -72,23 +400,7 @@ def write_audit_report(summary_data):
     workbook = Workbook()
     workbook.remove(workbook.active)
 
-    summary_sheet = workbook.create_sheet("Summary")
-    summary_sheet.append(["Field", "Value"])
-    summary_sheet.append(["Audit Type", summary_data.get("audit_type", "")])
-    summary_sheet.append(["Date/Time", summary_data.get("generated_at", "")])
-    summary_sheet.append(["Matching SKUs", summary_data.get("matching_count", 0)])
-    summary_sheet.append(["Missing from Directus", summary_data.get("missing_from_directus_count", 0)])
-    summary_sheet.append(["Missing from TrackVia", summary_data.get("missing_from_trackvia_count", 0)])
-    summary_sheet.append(["Total Specification Mismatches", summary_data.get("total_mismatches", 0)])
-    summary_sheet.append([])
-    summary_sheet.append(["Tier 1 Field Summary", ""])
-    for field_name, details in summary_data.get("tier1_summary", {}).items():
-        summary_sheet.append(
-            [
-                field_name,
-                f"comparisons={details.get('comparisons', 0)}; mismatches={details.get('mismatches', 0)}; status={details.get('status', 'PASS')}",
-            ]
-        )
+    dashboard_sheet = _build_dashboard_sheet(workbook, summary_data)
 
     missing_products_sheet = workbook.create_sheet("Missing Products")
     missing_products_sheet.append(["SKU", "Missing From"])
@@ -159,6 +471,17 @@ def write_audit_report(summary_data):
                 comparison.get("reason", ""),
             ]
         )
+
+    if summary_data.get("product_corrections"):
+        _append_product_corrections_sheet(workbook, summary_data.get("product_corrections", []))
+
+    _populate_dashboard_index(dashboard_sheet, workbook)
+
+    for sheet in workbook.worksheets:
+        if sheet.title != "Dashboard":
+            _style_table_sheet(sheet)
+
+    _autosize_columns(dashboard_sheet)
 
     workbook.save(report_path)
     return report_path.name
