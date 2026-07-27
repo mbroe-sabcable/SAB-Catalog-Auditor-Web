@@ -14,6 +14,7 @@ from reports import excel_report as excel_report_module
 from reports.correction_report import build_correction_recommendations
 
 normalize_part_number = UnifiedRecordBuilder.normalize_part_number
+APP_VERSION = "1.1"
 
 
 def _build_outlier_analysis_html(outlier_rows):
@@ -182,15 +183,17 @@ if not getattr(four_way_comparison_module, "_outlier_reporting_patched", False):
 
 
 class AuditEngine:
-    def __init__(self, trackvia_df=None, directus_df=None, german_df=None, us_catalog_df=None, audit_type="Full Product Family Audit"):
+    def __init__(self, trackvia_df=None, directus_df=None, german_df=None, us_catalog_df=None, rubicon_df=None, audit_type="Full Product Family Audit"):
         self.trackvia_df = trackvia_df
         self.directus_df = directus_df
         self.german_df = german_df
         self.us_catalog_df = us_catalog_df
+        self.rubicon_df = rubicon_df
         self.audit_type = audit_type
         self.field_mapper = FieldMapper()
         self.records = UnifiedRecordBuilder.build(trackvia_df, directus_df, german_df, us_catalog_df)
         self.four_way_comparisons = []
+        self.rubicon_weight_results = []
 
     def _write_debug_file(self):
         debug_path = Path(__file__).resolve().parent.parent / "reports" / "debug.txt"
@@ -263,7 +266,9 @@ class AuditEngine:
         debug_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _normalize_column_name(self, column_name):
-        return "".join(ch.lower() for ch in str(column_name) if ch.isalnum())
+        # Keep only ASCII alphanumerics so mojibake/non-ASCII header artifacts
+        # do not block expected-column matching.
+        return "".join(ch.lower() for ch in str(column_name) if ch.isascii() and ch.isalnum())
 
     def _unique_values(self, df, column_name):
         values = []
@@ -294,6 +299,86 @@ class AuditEngine:
             if self._normalize_column_name(column) == expected:
                 return column
         return None
+
+    def _to_rounded_whole_number(self, value):
+        if value is None or pd.isna(value):
+            return None
+
+        try:
+            return int(round(float(value)))
+        except (TypeError, ValueError):
+            return None
+
+    def _build_rubicon_weight_lookup(self):
+        if self.rubicon_df is None:
+            return {}
+
+        part_number_column = self._get_column_by_expected_name(self.rubicon_df, "item_number")
+        weight_column = self._get_column_by_expected_name(self.rubicon_df, "weight")
+        if part_number_column is None or weight_column is None:
+            return {}
+
+        rubicon_lookup = {}
+        for _, row in self.rubicon_df.iterrows():
+            part_number = normalize_part_number(row[part_number_column]) if pd.notna(row[part_number_column]) else ""
+            if not part_number:
+                continue
+            rubicon_lookup[part_number] = row
+
+        return rubicon_lookup
+
+    def _build_rubicon_weight_results(self):
+        if self.rubicon_df is None or self.german_df is None:
+            return []
+
+        rubicon_lookup = self._build_rubicon_weight_lookup()
+        weight_column = self._get_column_by_expected_name(self.rubicon_df, "weight")
+        if not rubicon_lookup or weight_column is None:
+            return []
+
+        results = []
+        german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight ≈ lbs/mft")
+        if german_weight_column is None:
+            german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Ålb/1000 ft")
+        if german_weight_column is None:
+            german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Alb/1000 ft")
+
+        for record in self.records:
+            part_number = normalize_part_number(record.sku, preserve_leading_zeros=True)
+            if not part_number:
+                continue
+
+            engineering_weight = None
+            if record.german_row is not None and german_weight_column is not None:
+                engineering_weight = self._to_rounded_whole_number(record.german_row.get(german_weight_column))
+
+            rubicon_row = rubicon_lookup.get(part_number)
+            if rubicon_row is None:
+                results.append(
+                    {
+                        "part_number": part_number,
+                        "engineering_weight": engineering_weight,
+                        "rubicon_weight": "",
+                        "status": "NOT FOUND IN RUBICON",
+                        "result": "NOT FOUND IN RUBICON",
+                    }
+                )
+                continue
+
+            rubicon_weight = self._to_rounded_whole_number(rubicon_row.get(weight_column))
+            result = "MATCH" if engineering_weight is not None and engineering_weight == rubicon_weight else "WEIGHT MISMATCH"
+
+            results.append(
+                {
+                    "part_number": part_number,
+                    "engineering_weight": engineering_weight,
+                    "rubicon_weight": rubicon_weight,
+                    "status": result,
+                    "result": result,
+                }
+            )
+
+        return results
 
     def _get_german_value_for_field(self, sku, field_mapping):
         if not sku or self.german_df is None or self.trackvia_df is None or not field_mapping:
@@ -700,6 +785,10 @@ class AuditEngine:
     def run(self):
         comparisons = FourWayComparison().compare(self.records)
         self.four_way_comparisons = comparisons
+        self.rubicon_weight_results = self._build_rubicon_weight_results()
+        rubicon_weight_matches = sum(1 for item in self.rubicon_weight_results if item.get("result") == "MATCH")
+        rubicon_weight_mismatches = sum(1 for item in self.rubicon_weight_results if item.get("result") == "WEIGHT MISMATCH")
+        rubicon_not_found = sum(1 for item in self.rubicon_weight_results if item.get("result") == "NOT FOUND IN RUBICON")
 
         report_filename = ""
         summary_metrics = {
@@ -707,6 +796,9 @@ class AuditEngine:
             "missing_products": 0,
             "specification_mismatches": 0,
             "corrections_generated": 0,
+            "rubicon_weight_matches": 0,
+            "rubicon_weight_mismatches": 0,
+            "rubicon_not_found": 0,
         }
 
         if self.trackvia_df is not None and self.directus_df is not None:
@@ -726,7 +818,7 @@ class AuditEngine:
             summary_data = {
                 "audit_type": self.audit_type,
                 "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "app_version": "0.9.0",
+                "app_version": APP_VERSION,
                 "source_files": {
                     "german_engineering": self.german_df.attrs.get("source_filename", "") if self.german_df is not None else "",
                     "trackvia": self.trackvia_df.attrs.get("source_filename", "") if self.trackvia_df is not None else "",
@@ -744,6 +836,10 @@ class AuditEngine:
                 "tier1_summary": tier1_summary,
                 "recommended_corrections": recommended_corrections,
                 "product_corrections": [],
+                "rubicon_weight_results": self.rubicon_weight_results,
+                "rubicon_weight_matches": rubicon_weight_matches,
+                "rubicon_weight_mismatches": rubicon_weight_mismatches,
+                "rubicon_not_found": rubicon_not_found,
             }
             summary_data["four_way_comparisons"] = self.four_way_comparisons
             if summary_data["four_way_comparisons"]:
@@ -761,11 +857,15 @@ class AuditEngine:
                 "missing_products": len(missing_from_directus) + len(missing_from_trackvia),
                 "specification_mismatches": len(mismatches),
                 "corrections_generated": len(recommended_corrections),
+                "rubicon_weight_matches": rubicon_weight_matches,
+                "rubicon_weight_mismatches": rubicon_weight_mismatches,
+                "rubicon_not_found": rubicon_not_found,
             }
 
         return {
             "comparison_html": "",
             "report_filename": report_filename,
             "four_way_comparisons": self.four_way_comparisons,
+            "rubicon_weight_results": self.rubicon_weight_results,
             "summary_metrics": summary_metrics,
         }

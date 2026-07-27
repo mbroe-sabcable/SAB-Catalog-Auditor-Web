@@ -22,6 +22,7 @@ UPLOAD_FIELDS = [
     ("directus_csv", "Directus CSV"),
     ("german_engineering_csv", "German Engineering CSV"),
     ("us_catalog_csv", "US Catalog CSV"),
+    ("rubicon_excel", "Rubicon ERP"),
 ]
 
 try:
@@ -41,7 +42,11 @@ def _detect_encoding(contents: bytes) -> str:
 
 
 def _load_dataframe(contents: bytes, filename: str):
+    file_extension = Path(filename).suffix.lower()
     encoding = _detect_encoding(contents)
+
+    if file_extension in {".xlsx", ".xls"}:
+        return pd.read_excel(BytesIO(contents))
 
     if CSVLoader is not None:
         try:
@@ -77,7 +82,13 @@ def _format_column_names(columns):
     return ", ".join(names)
 
 
-def _summarize_csv(contents: bytes, filename: str):
+def _summarize_upload(contents: bytes, filename: str):
+    file_extension = Path(filename).suffix.lower()
+
+    if file_extension in {".xlsx", ".xls"}:
+        dataframe = pd.read_excel(BytesIO(contents))
+        return "excel", int(dataframe.shape[0]), int(dataframe.shape[1]), list(dataframe.columns)
+
     encoding = _detect_encoding(contents)
 
     if CSVLoader is not None:
@@ -164,6 +175,7 @@ async def audit(
     directus_csv: Optional[UploadFile] = File(None),
     german_engineering_csv: Optional[UploadFile] = File(None),
     us_catalog_csv: Optional[UploadFile] = File(None),
+    rubicon_excel: Optional[UploadFile] = File(None),
 ):
     results = []
     uploaded_files = {}
@@ -172,7 +184,7 @@ async def audit(
         if upload_file is not None and getattr(upload_file, "filename", None):
             contents = await upload_file.read()
             uploaded_files[field_name] = (contents, upload_file.filename)
-            encoding, row_count, column_count, column_names = _summarize_csv(contents, upload_file.filename)
+            encoding, row_count, column_count, column_names = _summarize_upload(contents, upload_file.filename)
             results.append(
                 {
                     "label": label,
@@ -202,6 +214,7 @@ async def audit(
         directus_df.attrs["source_filename"] = directus_filename
         german_df = None
         us_catalog_df = None
+        rubicon_df = None
 
         if "german_engineering_csv" in uploaded_files:
             german_contents, german_filename = uploaded_files["german_engineering_csv"]
@@ -213,11 +226,17 @@ async def audit(
             us_catalog_df = _load_dataframe(us_catalog_contents, us_catalog_filename)
             us_catalog_df.attrs["source_filename"] = us_catalog_filename
 
+        if "rubicon_excel" in uploaded_files:
+            rubicon_contents, rubicon_filename = uploaded_files["rubicon_excel"]
+            rubicon_df = _load_dataframe(rubicon_contents, rubicon_filename)
+            rubicon_df.attrs["source_filename"] = rubicon_filename
+
         engine = AuditEngine(
             trackvia_df=trackvia_df,
             directus_df=directus_df,
             german_df=german_df,
             us_catalog_df=us_catalog_df,
+            rubicon_df=rubicon_df,
             audit_type=audit_type,
         )
         audit_result = engine.run()
@@ -230,6 +249,9 @@ async def audit(
             "missing_products": f"{int(summary_metrics.get('missing_products', 0)):,}",
             "specification_mismatches": f"{int(summary_metrics.get('specification_mismatches', 0)):,}",
             "corrections_generated": f"{int(summary_metrics.get('corrections_generated', 0)):,}",
+            "rubicon_weight_matches": f"{int(summary_metrics.get('rubicon_weight_matches', 0)):,}",
+            "rubicon_weight_mismatches": f"{int(summary_metrics.get('rubicon_weight_mismatches', 0)):,}",
+            "rubicon_not_found": f"{int(summary_metrics.get('rubicon_not_found', 0)):,}",
             "report_relative_path": f"reports/output/{report_filename}" if report_filename else "",
         }
 

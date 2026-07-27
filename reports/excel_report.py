@@ -224,6 +224,9 @@ def _build_dashboard_sheet(workbook, summary_data):
     missing_products = int(summary_data.get("missing_from_directus_count", 0) or 0) + int(summary_data.get("missing_from_trackvia_count", 0) or 0)
     mismatches = int(summary_data.get("total_mismatches", 0) or 0)
     corrections_generated = _count_corrections(summary_data)
+    rubicon_weight_matches = int(summary_data.get("rubicon_weight_matches", 0) or 0)
+    rubicon_weight_mismatches = int(summary_data.get("rubicon_weight_mismatches", 0) or 0)
+    rubicon_not_found = int(summary_data.get("rubicon_not_found", 0) or 0)
 
     _box_header(dashboard, 2, 5, 6, "Report Details")
     _box_rows(
@@ -265,6 +268,9 @@ def _build_dashboard_sheet(workbook, summary_data):
             ("Missing Products", missing_products),
             ("Specification Mismatches", mismatches),
             ("Corrections Generated", corrections_generated),
+            ("Rubicon Weight Matches", rubicon_weight_matches),
+            ("Rubicon Weight Mismatches", rubicon_weight_mismatches),
+            ("Not Found in Rubicon", rubicon_not_found),
         ],
     )
 
@@ -285,32 +291,32 @@ def _build_dashboard_sheet(workbook, summary_data):
         dashboard[cell_ref].fill = health_fill
         dashboard[cell_ref].font = Font(name="Calibri", size=11, bold=True, color="1F2937")
 
-    _box_header(dashboard, 2, 5, 20, "Worksheet Index")
-    dashboard.merge_cells("C21:E21")
+    _box_header(dashboard, 2, 5, 22, "Worksheet Index")
+    dashboard.merge_cells("C23:E23")
     _set_cell(
-        dashboard["B21"],
+        dashboard["B23"],
         "Dashboard",
         font=BODY_FONT,
         alignment=Alignment(horizontal="left", vertical="center"),
         border=THIN_BORDER,
     )
     _set_cell(
-        dashboard["C21"],
+        dashboard["C23"],
         "Go to sheet",
         font=Font(name="Calibri", size=11, color="0563C1", underline="single"),
         alignment=Alignment(horizontal="left", vertical="center"),
         border=THIN_BORDER,
     )
-    dashboard["C21"].hyperlink = "#'Dashboard'!A1"
+    dashboard["C23"].hyperlink = "#'Dashboard'!A1"
     for col in range(4, 6):
-        dashboard.cell(row=21, column=col).border = THIN_BORDER
+        dashboard.cell(row=23, column=col).border = THIN_BORDER
 
     dashboard.freeze_panes = "A7"
     return dashboard
 
 
 def _populate_dashboard_index(dashboard, workbook):
-    start_row = 22
+    start_row = 24
     index_row = start_row
     for sheet_name in workbook.sheetnames:
         if sheet_name == "Dashboard":
@@ -471,6 +477,27 @@ def write_audit_report(summary_data):
                 comparison.get("reason", ""),
             ]
         )
+
+    rubicon_sheet = workbook.create_sheet("Rubicon Weight Audit")
+    rubicon_sheet.append(["US Part #", "Engineering Weight", "Rubicon Weight", "Status"])
+    rubicon_weight_results = summary_data.get("rubicon_weight_results", []) or []
+    rubicon_exceptions = [
+        result for result in rubicon_weight_results
+        if result.get("result") in {"WEIGHT MISMATCH", "NOT FOUND IN RUBICON"}
+    ]
+
+    if rubicon_exceptions:
+        for result in rubicon_exceptions:
+            rubicon_sheet.append(
+                [
+                    normalize_part_number(result.get("part_number", ""), preserve_leading_zeros=True),
+                    result.get("engineering_weight", ""),
+                    result.get("rubicon_weight", ""),
+                    result.get("result", ""),
+                ]
+            )
+    else:
+        rubicon_sheet.append(["No Rubicon weight discrepancies found.", "", "", ""])
 
     if summary_data.get("product_corrections"):
         _append_product_corrections_sheet(workbook, summary_data.get("product_corrections", []))
