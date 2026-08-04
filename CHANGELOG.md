@@ -1,47 +1,95 @@
-# Changelog
+# SAB Catalog Auditor
 
-All notable changes to this project should be documented in this file.
+All notable changes to this project are documented in this file.
 
-## v2.0.0 (Planned)
+---
 
-### Added
-- Database support
-- PDF report generation
-- Installer and distribution support
-- Application auto-update support
+# Version 1.1
+**Release Date:** July 27, 2026
 
-## v1.1.0 (Planned)
+## 🎉 Initial Production Release
 
-### Added
-- Charts in dashboard/report outputs
-- Audit health score rollups
-- Conditional formatting improvements
-
-## v1.0.0 (Planned)
+The first production-ready version of the SAB Catalog Auditor.
 
 ### Added
-- Professional dashboard experience
-- Improved report formatting and readability
-- Source metadata visibility in reports
-- Better UI workflow and progress messaging
-- Stable audit engine release baseline
 
-## Unreleased
+#### Core Audits
+- Four-way product comparison across:
+	- TrackVia
+	- Directus
+	- German Engineering
+	- US Catalog
+- Missing Product audit
+- Specification Mismatch audit
+- German ↔ US mapping verification
+- Rubicon Weight audit
 
-### Added
-- Root-level documentation baseline for project onboarding and architecture.
-- Authoritative audit behavior reference in `AUDIT_RULES.md`.
-- Expanded AI coding guidance in `COPILOT_INSTRUCTIONS.md`.
+#### Reporting
+- Excel report generation
+- Dashboard worksheet
+- Missing Products worksheet
+- Specification Mismatches worksheet
+- German-US Mapping worksheet
+- Four-Way Comparison worksheet
+- Rubicon Weight Audit worksheet
 
-## v0.9.0
+#### Web Application
+- Browser-based upload interface
+- Four-file upload validation
+- Progress logging
+- Completion summary
+- Downloadable Excel report
 
-### Added
-- Universal part number normalization
-- Four-way comparison improvements
-- Product correction reporting
+#### Dashboard Metrics
+- Products Compared
+- Missing Products
+- Specification Mismatches
+- Corrections Generated
+- Rubicon Weight Matches
+- Rubicon Weight Mismatches
+- Not Found in Rubicon
 
 ### Fixed
-- False Directus missing product detection caused by floating-point part numbers.
 
-### Changed
-- Standardized SKU normalization across reports.
+- Corrected Rubicon lookup to use the US SKU instead of the German part number.
+- Fixed Engineering Weight lookup using the correct German Engineering weight column.
+- Improved column normalization for special characters and encoding differences.
+- Removed all temporary Rubicon troubleshooting and debug logging.
+- Added Rubicon metrics to the completion summary.
+- Added application version tracking.
+
+### Technical
+
+- Git repository initialized.
+- Production release tagged as **v1.1**.
+- Development branch created for future work.
+
+### Known Issues
+
+- Dashboard Health Score calculation should be reviewed.
+- Product Family filtering is planned for Version 1.2.
+
+---
+
+# Version 1.2
+*(In Development)*
+
+## Planned
+
+### High Priority
+- Product Family selector
+- Health Score improvements
+- Dashboard hyperlinks
+- Enhanced mismatch grouping
+
+### Medium Priority
+- Dashboard charts
+- Export corrections to CSV
+- Configurable field mappings
+- Audit history
+
+### Future Ideas
+- Batch auditing
+- User preferences
+- Saved configurations
+- PDF executive summary

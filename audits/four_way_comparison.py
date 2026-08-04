@@ -234,9 +234,15 @@ class FourWayComparison:
             "reason": "",
         }
 
-    def _compare_german_part_number(self, german_item_no, trackvia_part_german):
+    def _compare_german_part_number(self, german_item_no, trackvia_part_german, german_row_found):
         german_value = self._normalize_part_number(german_item_no)
         trackvia_value = self._normalize_part_number(trackvia_part_german)
+
+        if trackvia_value and not german_row_found:
+            return {
+                "status": "FAIL",
+                "reason": "German Part Number Not Found in German Engineering",
+            }
 
         if german_value and not trackvia_value:
             return {
@@ -363,6 +369,7 @@ class FourWayComparison:
                     result = self._compare_german_part_number(
                         german_value,
                         trackvia_value,
+                        german_row is not None,
                     )
                 else:
                     result = self._compare_generic(

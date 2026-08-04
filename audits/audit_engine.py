@@ -328,7 +328,7 @@ class AuditEngine:
         return rubicon_lookup
 
     def _build_rubicon_weight_results(self):
-        if self.rubicon_df is None or self.german_df is None:
+        if self.rubicon_df is None:
             return []
 
         rubicon_lookup = self._build_rubicon_weight_lookup()
@@ -337,11 +337,21 @@ class AuditEngine:
             return []
 
         results = []
-        german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight ≈ lbs/mft")
-        if german_weight_column is None:
-            german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Ålb/1000 ft")
-        if german_weight_column is None:
-            german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Alb/1000 ft")
+        german_weight_column = None
+        if self.german_df is not None:
+            german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight ≈ lbs/mft")
+            if german_weight_column is None:
+                german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Ålb/1000 ft")
+            if german_weight_column is None:
+                german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Alb/1000 ft")
+
+        us_catalog_weight_column = None
+        if self.us_catalog_df is not None:
+            us_catalog_weight_column = self._get_column_by_expected_name(self.us_catalog_df, "Cable weight Lbs")
+            if us_catalog_weight_column is None:
+                us_catalog_weight_column = self._get_column_by_expected_name(self.us_catalog_df, "Cable Weight Lbs")
+            if us_catalog_weight_column is None:
+                us_catalog_weight_column = self._get_column_by_expected_name(self.us_catalog_df, "Cable weight")
 
         for record in self.records:
             part_number = normalize_part_number(record.sku, preserve_leading_zeros=True)
@@ -351,6 +361,26 @@ class AuditEngine:
             engineering_weight = None
             if record.german_row is not None and german_weight_column is not None:
                 engineering_weight = self._to_rounded_whole_number(record.german_row.get(german_weight_column))
+
+            if (
+                record.german_row is None
+                and engineering_weight is None
+                and record.us_catalog_row is not None
+                and us_catalog_weight_column is not None
+            ):
+                engineering_weight = self._to_rounded_whole_number(record.us_catalog_row.get(us_catalog_weight_column))
+
+            if engineering_weight is None:
+                results.append(
+                    {
+                        "part_number": part_number,
+                        "engineering_weight": "No Weight Available",
+                        "rubicon_weight": "",
+                        "status": "No Weight Available",
+                        "result": "No Weight Available",
+                    }
+                )
+                continue
 
             rubicon_row = rubicon_lookup.get(part_number)
             if rubicon_row is None:
