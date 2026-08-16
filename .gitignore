@@ -8,3 +8,6 @@
 reports/output/
 __pycache__/
 *.py[cod]
+
+.venv/
+__pycache__/

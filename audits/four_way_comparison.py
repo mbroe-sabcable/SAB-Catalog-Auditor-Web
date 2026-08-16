@@ -2,6 +2,7 @@ from importers.field_mapper import FieldMapper
 import math
 import re
 
+import pandas as pd
 
 class FourWayComparison:
     def _normalize_part_number(self, value):
@@ -234,14 +235,25 @@ class FourWayComparison:
             "reason": "",
         }
 
-    def _compare_german_part_number(self, german_item_no, trackvia_part_german, german_row_found):
+    def _compare_german_part_number(
+        self,
+        german_item_no,
+        trackvia_part_german,
+        german_row_found,
+        german_source_available,
+    ):
         german_value = self._normalize_part_number(german_item_no)
         trackvia_value = self._normalize_part_number(trackvia_part_german)
 
         if trackvia_value and not german_row_found:
             return {
                 "status": "FAIL",
-                "reason": "German Part Number Not Found in German Engineering",
+                "reason": (
+                    "German Part Number Not Found in German Engineering"
+                    if german_source_available
+                    else "No German Engineering source available for this series. "
+                    "US Catalog used as engineering reference."
+                ),
             }
 
         if german_value and not trackvia_value:
@@ -265,6 +277,7 @@ class FourWayComparison:
     def compare(self, records):
         mapper = FieldMapper()
         comparisons = []
+        german_source_available = any(record.german_row is not None for record in records)
 
         field_definitions = [
             ("us_part_number", "US Part Number"),
@@ -358,6 +371,16 @@ class FourWayComparison:
                     directus_value = directus_row.get(directus_column) if directus_row is not None and directus_column else None
                     us_catalog_value = us_catalog_row.get(us_catalog_column) if us_catalog_row is not None and us_catalog_column else None
 
+                effective_german_value = german_value
+                if (
+                    field_key not in {"us_part_number", "german_part_number"}
+                    and (
+                        pd.isna(german_value)
+                        or (isinstance(german_value, str) and not german_value.strip())
+                    )
+                ):
+                    effective_german_value = us_catalog_value
+
                 if field_key == "us_part_number":
                     result = self._compare_us_part_number(
                         german_value,
@@ -370,10 +393,11 @@ class FourWayComparison:
                         german_value,
                         trackvia_value,
                         german_row is not None,
+                        german_source_available,
                     )
                 else:
                     result = self._compare_generic(
-                        german_value,
+                        effective_german_value,
                         trackvia_value,
                         directus_value,
                         us_catalog_value,
