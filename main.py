@@ -1,6 +1,7 @@
 from io import BytesIO
 from html import escape
 from pathlib import Path
+import sys
 from typing import Optional
 
 import pandas as pd
@@ -12,11 +13,16 @@ from fastapi.templating import Jinja2Templates
 from audits.audit_engine import AuditEngine
 from audits.shared.validators import validate_trackvia_columns
 
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
 app = FastAPI(title="SAB Catalog Auditor")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 UPLOAD_FIELDS = [
     ("trackvia_csv", "TrackVia CSV"),
