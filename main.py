@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from audits.audit_engine import AuditEngine
 from audits.shared.validators import validate_trackvia_columns
+from reports.report_storage import get_report_directory
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     BASE_DIR = Path(sys._MEIPASS)
@@ -284,7 +285,7 @@ async def audit(
 
 @app.get("/download-report/{filename}")
 async def download_report(filename: str):
-    report_path = Path("reports/output") / filename
+    report_path = get_report_directory() / filename
     if not report_path.exists():
         return HTMLResponse("Report not found", status_code=404)
 
@@ -297,8 +298,7 @@ async def download_report(filename: str):
 
 @app.get("/reports-output", response_class=HTMLResponse)
 async def reports_output_browser():
-    output_dir = Path("reports/output")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = get_report_directory()
 
     files = sorted(
         [path for path in output_dir.iterdir() if path.is_file()],

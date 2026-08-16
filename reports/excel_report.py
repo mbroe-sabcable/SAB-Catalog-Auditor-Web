@@ -7,6 +7,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from audits.unified_record_builder import UnifiedRecordBuilder
+from reports.report_storage import get_report_directory
 
 
 HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F4E78")
@@ -31,9 +32,7 @@ def _set_cell(cell, value, font=None, fill=None, alignment=None, border=None):
 
 
 def _build_output_dir():
-    output_dir = Path(__file__).resolve().parent / "output"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
+    return get_report_directory()
 
 
 def _resolve_logo_path():
