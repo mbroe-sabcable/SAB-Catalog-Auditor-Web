@@ -39,7 +39,7 @@ def _wait_for_server(port, timeout=30):
 def main():
     port = _find_available_port()
     url = f"http://{HOST}:{port}"
-    config = uvicorn.Config(app, host=HOST, port=port, log_level="info")
+    config = uvicorn.Config(app, host=HOST, port=port, log_level="info", log_config=None)
     server = uvicorn.Server(config)
     server_thread = threading.Thread(target=server.run, name="uvicorn", daemon=True)
     server_thread.start()
