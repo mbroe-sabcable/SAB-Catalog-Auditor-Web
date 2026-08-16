@@ -6,3 +6,5 @@
 
 # Generated audit reports
 reports/output/
+__pycache__/
+*.py[cod]
