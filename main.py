@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from audits.audit_engine import AuditEngine
+from audits.shared.validators import validate_trackvia_columns
 
 app = FastAPI(title="SAB Catalog Auditor")
 
@@ -209,6 +210,16 @@ async def audit(
         trackvia_contents, trackvia_filename = uploaded_files["trackvia_csv"]
         directus_contents, directus_filename = uploaded_files["directus_csv"]
         trackvia_df = _load_dataframe(trackvia_contents, trackvia_filename)
+        try:
+            validate_trackvia_columns(trackvia_df)
+        except ValueError as error:
+            comparison_html = (
+                '<div class="alert alert-danger mt-4" role="alert">'
+                f"{escape(str(error))}"
+                "</div>"
+            )
+            return _render_page(request, results, audit_type, comparison_html, "", source_status, None)
+
         directus_df = _load_dataframe(directus_contents, directus_filename)
         trackvia_df.attrs["source_filename"] = trackvia_filename
         directus_df.attrs["source_filename"] = directus_filename
