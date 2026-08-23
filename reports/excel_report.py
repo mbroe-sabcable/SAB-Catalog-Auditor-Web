@@ -510,4 +510,6 @@ def write_audit_report(summary_data):
     _autosize_columns(dashboard_sheet)
 
     workbook.save(report_path)
+    if not report_path.exists():
+        raise RuntimeError(f"Workbook was not created: {report_path}")
     return report_path.name
