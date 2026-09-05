@@ -345,6 +345,8 @@ class AuditEngine:
                 german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Ålb/1000 ft")
             if german_weight_column is None:
                 german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight Alb/1000 ft")
+            if german_weight_column is None:
+                german_weight_column = self._get_column_by_expected_name(self.german_df, "Cable weight approx.lb/mft")
 
         us_catalog_weight_column = None
         if self.us_catalog_df is not None:
@@ -372,7 +374,6 @@ class AuditEngine:
                 engineering_weight = self._to_rounded_whole_number(record.us_catalog_row.get(us_catalog_weight_column))
 
             if engineering_weight is None:
-                if part_number == "61460150":
                 results.append(
                     {
                         "part_number": part_number,
@@ -387,7 +388,6 @@ class AuditEngine:
             lookup_key = part_number
             rubicon_row = rubicon_lookup.get(part_number)
             if rubicon_row is None:
-                if part_number == "61460150":
                 results.append(
                     {
                         "part_number": part_number,
@@ -401,7 +401,6 @@ class AuditEngine:
 
             rubicon_weight = self._to_rounded_whole_number(rubicon_row.get(weight_column))
             result = "MATCH" if engineering_weight is not None and engineering_weight == rubicon_weight else "WEIGHT MISMATCH"
-            if part_number == "61460150":
 
             results.append(
                 {
