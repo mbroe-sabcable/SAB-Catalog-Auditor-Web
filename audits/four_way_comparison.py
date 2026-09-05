@@ -351,17 +351,20 @@ class FourWayComparison:
 
                     us_catalog_value = self._to_number(us_catalog_row.get(us_catalog_column)) if us_catalog_row is not None and us_catalog_column else None
                 elif field_key == "od_inches":
-                    german_value = self._first_populated_raw(german_row, ["Outer-Ø- in", "Outer-¿- in"])
+                    german_column = mapper.resolve_german_column("od_inches", german_row.keys()) if german_row is not None else None
+                    german_value = self._first_populated_raw(german_row, [german_column] if german_column is not None else [])
                     trackvia_value = self._first_populated_raw(trackvia_row, ["part_od_inches", "part_od_inches_10", "part_od_inches_range"])
                     directus_value = self._first_populated_raw(directus_row, ["part_od_inches", "part_od_inches_10", "part_od_inches_range"])
                     us_catalog_value = us_catalog_row.get("OD In") if us_catalog_row is not None else None
                 elif field_key == "od_mm":
-                    german_value = self._first_populated_raw(german_row, ["Outer-Ø- mm", "Outer-¿- mm"])
+                    german_column = mapper.resolve_german_column("od_mm", german_row.keys()) if german_row is not None else None
+                    german_value = self._first_populated_raw(german_row, [german_column] if german_column is not None else [])
                     trackvia_value = self._first_populated_raw(trackvia_row, ["part_od_mm", "part_od_mm_10", "part_od_mm_range"])
                     directus_value = self._first_populated_raw(directus_row, ["part_od_mm", "part_od_mm_10", "part_od_mm_range"])
                     us_catalog_value = us_catalog_row.get("OD mm") if us_catalog_row is not None else None
                 elif field_key == "cable_weight":
-                    german_value = german_row.get("Cable weight Ålb/1000 ft") if german_row is not None else None
+                    german_column = mapper.resolve_german_column("cable_weight", german_row.keys()) if german_row is not None else None
+                    german_value = self._first_populated_raw(german_row, [german_column] if german_column is not None else [])
                     trackvia_value = trackvia_row.get("part_cable_weight") if trackvia_row is not None else None
                     directus_value = directus_row.get("part_cable_weight") if directus_row is not None else None
                     us_catalog_value = us_catalog_row.get("Cable weight Lbs") if us_catalog_row is not None else None

@@ -1,4 +1,15 @@
 class FieldMapper:
+    GERMAN_CABLE_WEIGHT_HEADERS = (
+        "Cable weight ≈ lbs/mft",
+        "Cable weight Ålb/1000 ft",
+        "Cable weight Alb/1000 ft",
+        "Cable weight approx.lb/mft",
+    )
+    GERMAN_NORMALIZED_HEADERS = {
+        "od_inches": "outerin",
+        "od_mm": "outermm",
+    }
+
     def __init__(self):
         self.field_mapping = [
             {
@@ -94,6 +105,27 @@ class FieldMapper:
 
     def get_part_number_mapping(self, source_name):
         return self.get_mapping("part_number")[source_name]
+
+    def resolve_german_column(self, field_name, columns):
+        normalized_headers = {
+            "".join(ch.lower() for ch in str(header) if ch.isascii() and ch.isalnum()): header
+            for header in columns
+        }
+
+        normalized_expected = self.GERMAN_NORMALIZED_HEADERS.get(field_name)
+        if normalized_expected:
+            return normalized_headers.get(normalized_expected)
+
+        if field_name != "cable_weight":
+            return self.get_mapping(field_name).get("german")
+
+        for expected_header in self.GERMAN_CABLE_WEIGHT_HEADERS:
+            normalized_expected = "".join(
+                ch.lower() for ch in expected_header if ch.isascii() and ch.isalnum()
+            )
+            if normalized_expected in normalized_headers:
+                return normalized_headers[normalized_expected]
+        return None
 
     def get_specification_mappings(self):
         return [field for field in self.field_mapping if field["key"] != "part_number"]

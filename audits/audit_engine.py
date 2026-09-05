@@ -331,6 +331,7 @@ class AuditEngine:
         if self.rubicon_df is None:
             return []
 
+        rubicon_source_filename = self.rubicon_df.attrs.get("source_filename", "")
         rubicon_lookup = self._build_rubicon_weight_lookup()
         weight_column = self._get_column_by_expected_name(self.rubicon_df, "weight")
         if not rubicon_lookup or weight_column is None:
@@ -371,6 +372,7 @@ class AuditEngine:
                 engineering_weight = self._to_rounded_whole_number(record.us_catalog_row.get(us_catalog_weight_column))
 
             if engineering_weight is None:
+                if part_number == "61460150":
                 results.append(
                     {
                         "part_number": part_number,
@@ -382,8 +384,10 @@ class AuditEngine:
                 )
                 continue
 
+            lookup_key = part_number
             rubicon_row = rubicon_lookup.get(part_number)
             if rubicon_row is None:
+                if part_number == "61460150":
                 results.append(
                     {
                         "part_number": part_number,
@@ -397,6 +401,7 @@ class AuditEngine:
 
             rubicon_weight = self._to_rounded_whole_number(rubicon_row.get(weight_column))
             result = "MATCH" if engineering_weight is not None and engineering_weight == rubicon_weight else "WEIGHT MISMATCH"
+            if part_number == "61460150":
 
             results.append(
                 {
