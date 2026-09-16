@@ -56,7 +56,7 @@ class FieldMapper:
                 "trackvia": "part_pair_count",
                 "directus": "part_pair_count",
                 "german": None,
-                "us_catalog": None,
+                "us_catalog": "Pairs",
                 "source_of_truth": "German",
             },
             {

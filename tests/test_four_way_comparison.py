@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from audits.four_way_comparison import FourWayComparison
@@ -125,12 +127,25 @@ def test_conductor_only_construction_remains_consistent():
 def test_pair_only_construction_remains_consistent():
     results = _construction_results(
         _construction_record(
-            {"Pairs": "2", "No. of cores": ""},
-            {"part_pair_count": "2"},
-            {"part_pair_count": "2"},
-            {},
+            {"Pairs": "4", "No. of cores": ""},
+            {"part_pair_count": "4"},
+            {"part_pair_count": "4"},
+            {"Conductors": float("nan"), "Pairs": "4"},
         )
     )
 
+    assert all(
+        value is None or (isinstance(value, float) and math.isnan(value))
+        for value in [
+            results["Conductors"]["german"],
+            results["Conductors"]["trackvia"],
+            results["Conductors"]["directus"],
+            results["Conductors"]["us_catalog"],
+        ]
+    )
+    assert [
+        results["Pairs"][source]
+        for source in ["german", "trackvia", "directus", "us_catalog"]
+    ] == [4, 4, 4, 4]
     assert results["Conductors"]["status"] == "PASS"
     assert results["Pairs"]["status"] == "PASS"

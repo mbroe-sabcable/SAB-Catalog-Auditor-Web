@@ -203,7 +203,7 @@ class FourWayComparison:
         """Compare cable construction using conductors or pairs x 2 per source."""
         construction_values = []
         for conductor, pair_count in zip(conductors, pair_counts):
-            if conductor is not None:
+            if conductor is not None and not pd.isna(conductor):
                 construction_values.append(self._normalize_for_comparison(conductor))
             elif pair_count is not None:
                 construction_values.append(
@@ -345,7 +345,9 @@ class FourWayComparison:
                     else None,
                     self._first_populated_numeric(trackvia_row, ["part_pair_count"]),
                     self._first_populated_numeric(directus_row, ["part_pair_count"]),
-                    None,
+                    self._to_number(us_catalog_row.get("Pairs"))
+                    if us_catalog_row is not None
+                    else None,
                 ]
 
                 if field_key == "us_part_number":
