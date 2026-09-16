@@ -199,6 +199,22 @@ class FourWayComparison:
             "reason": "",
         }
 
+    def _compare_construction(self, conductors, pair_counts):
+        """Compare cable construction using conductors or pairs x 2 per source."""
+        construction_values = []
+        for conductor, pair_count in zip(conductors, pair_counts):
+            if conductor is not None:
+                construction_values.append(self._normalize_for_comparison(conductor))
+            elif pair_count is not None:
+                construction_values.append(
+                    self._normalize_for_comparison(pair_count * 2)
+                )
+
+        return {
+            "status": "PASS" if len(set(construction_values)) <= 1 else "FAIL",
+            "reason": "",
+        }
+
     def _compare_us_part_number(self, german, trackvia, directus, us_catalog):
         german_value = self._normalize_part_number(german)
         trackvia_value = self._normalize_part_number(trackvia)
@@ -306,6 +322,32 @@ class FourWayComparison:
                 german_row = record.german_row
                 us_catalog_row = record.us_catalog_row
 
+                german_cores = self._parse_german_cores(
+                    german_row.get("No. of cores") if german_row is not None else None
+                )
+                construction_conductors = [
+                    german_cores.get("conductors"),
+                    self._first_populated_numeric(
+                        trackvia_row,
+                        ["part_cond_no_ground", "part_cond_with_ground"],
+                    ),
+                    self._first_populated_numeric(
+                        directus_row,
+                        ["part_cond_no_ground", "part_cond_with_ground"],
+                    ),
+                    self._to_number(us_catalog_row.get("Conductors"))
+                    if us_catalog_row is not None
+                    else None,
+                ]
+                construction_pairs = [
+                    self._to_number(german_row.get("Pairs"))
+                    if german_row is not None
+                    else None,
+                    self._first_populated_numeric(trackvia_row, ["part_pair_count"]),
+                    self._first_populated_numeric(directus_row, ["part_pair_count"]),
+                    None,
+                ]
+
                 if field_key == "us_part_number":
                     german_value = self._normalize_part_number(record.sku)
                     trackvia_value = self._normalize_part_number(trackvia_row.get("sku") if trackvia_row is not None else None)
@@ -398,6 +440,12 @@ class FourWayComparison:
                         german_row is not None,
                         german_source_available,
                     )
+                elif field_key in {"conductors", "pair_count"}:
+                    construction_result = self._compare_construction(
+                        construction_conductors,
+                        construction_pairs,
+                    )
+                    result = construction_result
                 else:
                     result = self._compare_generic(
                         effective_german_value,
